@@ -27,11 +27,14 @@ import pickle
 # line (e.g. 'scons OUTPUT_WIDTH=1000').
 #
 vars = Variables("custom.py")
+
+
 vars.AddVariables(
     ("OUTPUT_WIDTH", "Limit progress-lines to a maximum number of characters.", 1000),
     ("BATCH_SIZE", "Self-explanatory.", 1024),
     ("TRAIN_PROPORTION", "Proportion of data for training.", 0.8),
     ("DEV_PROPORTION", "Proportion of data for development/tuning.", 0.1),
+    ("USE_GRID", "", False),
     ("TEST_PROPORTION", "Proportion of data for testing.", 0.1),
     ("FOLDS", "How many full, randomized sets of experiments to run.", 1),
     ("HOTSPOT_PATH", "", "/home/tom/projects/hotspot"),
@@ -45,11 +48,11 @@ vars.AddVariables(
         "This dictionary maps the name of a dataset to the locations of its canonical files (i.e. as-provided/downloaded).",
         {
             "Twitter" : ["${DATA_PATH}/twitter_lid/balanced_lid.txt.gz"], # 70 70k
-            "Appen" : ["${DATA_PATH}/appen.tgz"], # 20 100k
+            #"Appen" : ["${DATA_PATH}/appen.tgz"], # 20 100k
             #"Tatoeba" : ["${DATA_PATH}/sentences_detailed.tar.bz2"], # 400 9.5m
             #"CALCS" : ["${{DATA_PATH}}/calcs2021/lid_{}.zip".format(x) for x in ["hineng", "msaea", "nepeng", "spaeng"]], # codeswitch
             #"ADoBo" : ["${DATA_PATH}/ADoBo/training.conll.gz"], # borrow
-            "WiLI" : ["${DATA_PATH}/wili-2018.zip"], # 200 117k
+            #"WiLI" : ["${DATA_PATH}/wili-2018.zip"], # 200 117k
             #"UMASS" : ["${DATA_PATH}/twitter_lid/umass_global_english_tweets-v1.zip"], # 10.5k eng/non-eng/codeswitch
         }
     ),
@@ -57,20 +60,21 @@ vars.AddVariables(
         "MODELS",
         "Each model name is associated with lists of hyper-parameters for n-ary experiments.",
         {
-            "VaLID" : {
-                "ngram_length" : 4,
-                "use_gpu" : False,
-            },
+            #"VaLID" : {
+            #   "ngram_length" : 4,
+            #   "use_gpu" : False,
+            #},
             #"HOTSPOT" : {
-            #   "hotspot_path" : "${HOTSPOT_PATH}",
+            #    "hotspot_path" : "${HOTSPOT_PATH}",
             #    "use_gpu" : False,
             #},
             #"biLSTM" : {
             #},
             #"CNN" : {
             #},
-            #"Attention" : {
-            #},
+            "Attention" : {
+                "use_gpu" : True
+            },
         }
     ),
 )
@@ -81,6 +85,7 @@ vars.AddVariables(
 env = Environment(variables=vars, ENV=os.environ, TARFLAGS="-c -z", TARSUFFIX=".tgz",
                   tools=["default", steamroller.generate],
 )
+
 
 #
 # Replace the default progress/dry-run command-printing function with one that uses the
@@ -121,9 +126,19 @@ env.AddBuilder(
     "${SOURCES} --output ${TARGETS[0]}"
 )
 env.AddBuilder(
-    "EvaluateOutput",
-    "scripts/evaluate_output.py",
+    "Evaluate",
+    "scripts/evaluate.py",
     "${SOURCES} --output ${TARGETS[0]}"    
+)
+env.AddBuilder(
+    "CreateReport",
+    "scripts/create_report.py",
+    "--input ${SOURCES[0]} --output ${TARGETS[0]}"    
+)
+env.AddBuilder(
+    "SaveConfig",
+    "scripts/save_config.py",
+    "${SOURCES} --output ${TARGETS[0]} --config '${CONFIG}'"
 )
 
 #
@@ -161,7 +176,9 @@ for model_name, model_spec in env["MODELS"].items():
     env.AddBuilder(
         apply_rule_name,
         "scripts/apply_model.py".format(model_name),
-        "--model_name ${MODEL_NAME} --model_input ${SOURCES[0]} --data_input ${SOURCES[1]} --applied_output ${TARGETS[0]} --statistical_output ${TARGETS[1]}",
+        " ".join(
+            ["--model_name ${MODEL_NAME} --model_input ${SOURCES[0]} --data_input ${SOURCES[1]} --applied_output ${TARGETS[0]} --statistical_output ${TARGETS[1]}"] + ["--{} {}".format(k, v) for k, v in model_spec.items()]
+        ),
         other_deps=["scripts/{}.py".format(model_name)]
     )
 
@@ -179,6 +196,7 @@ for dataset_name, filenames in env["DATASETS"].items():
     )
 if len(datasets) > 1:
     datasets["Combined"] = env.CombineData("work/Combined.json.gz", datasets.values())
+env.Alias("datasets", list(datasets.values()))
 
 def expand(model_spec):
     retval = [[]]
@@ -186,12 +204,10 @@ def expand(model_spec):
         retval = sum([[old + [(key, val)] for val in (vals if isinstance(vals, list) else [vals])] for old in retval], [])    
     return {md5(str(sorted(config)).encode()).hexdigest() : dict(config) for config in retval}
 
-
-
-
 #
 # The main experimental (nested) loop.
 #
+outputs = []
 for fold in range(1, env["FOLDS"] + 1):
     splits = {}
     for dataset_name, dataset in datasets.items():
@@ -201,7 +217,7 @@ for fold in range(1, env["FOLDS"] + 1):
             FOLD=fold,
             DATASET_NAME=dataset_name,
         )
-
+    env.Alias("splits", list(splits.values()))
     for dataset_name, (train_split, dev_split, _) in splits.items():
         trained_models = {}
         for model_name, model_spec in env["MODELS"].items():
@@ -223,10 +239,11 @@ for fold in range(1, env["FOLDS"] + 1):
                     ID=eid,
                     MODEL_NAME=model_name,
                 )
+                env.Alias("models", model)
                 for apply_dataset_name, (_, _, test_split) in splits.items():
                     output, apply_stats = applying_rule(
                         [
-                            "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/output_${ID}.gz",
+                            "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/output_${ID}.json.gz",
                             "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/applystats_${ID}.json.gz",
                         ],
                         [
@@ -240,6 +257,36 @@ for fold in range(1, env["FOLDS"] + 1):
                         ID=eid,
                         MODEL_NAME=model_name,
                     )
-                    
-    
+                    env.Alias("outputs", output)
+                    config_file = env.SaveConfig(
+                        "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/config_${ID}.json.gz",
+                        [],
+                        CONFIG=json.dumps(
+                            list(
+                                sorted(
+                                    list(conf.items()) + [
+                                        ("DATASET_NAME", dataset_name),
+                                        ("APPLY_DATASET", apply_dataset_name),
+                                        ("MODEL_NAME", model_name),
+                                        ("FOLD", fold),
+                                    ]
+                                )
+                            )
+                        ),
+                        FOLD=fold,
+                        DATASET_NAME=dataset_name,
+                        APPLY_DATASET=apply_dataset_name,
+                        ID=eid,
+                        MODEL_NAME=model_name,
+                    )
+                    env.Alias("configs", config_file)
+                    outputs.append((config_file, output, train_stats, apply_stats))
+results = env.Evaluate(
+    ["work/evaluation.json.gz"],
+    outputs
+)
 
+#env.CreateReport(
+#    ["work/report.tex"],
+#    results
+#)

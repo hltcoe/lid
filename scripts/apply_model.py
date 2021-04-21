@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
 
     with gzip.open(args.model_input, "rb") as ifd, gzip.open(args.applied_output, "wt") as ofd:
-        ofd.write(json.dumps(module.apply_model(ifd.read(), instances, rest)))
+        ofd.write(json.dumps(module.apply_model(ifd.read(), instances, rest), indent=4))
     end = time.time()
     with gzip.open(args.statistical_output, "wt") as ofd:
-        ofd.write(json.dumps({"time" : end - start}))
+        ofd.write(json.dumps({"time" : end - start}, indent=4))

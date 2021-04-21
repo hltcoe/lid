@@ -36,7 +36,10 @@ def train_model(train, dev, output, rest):
             os.mkdir(os.path.join(data, label))
             for i, text in enumerate(texts):
                 with open(os.path.join(data, label, "{}-{}-UTF-8".format(i, label)), "wt") as ofd:
-                    ofd.write(text)
+                    try:
+                        ofd.write(text)
+                    except:
+                        ofd.write(text.encode())
 
         command = "java -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/trainer/BuildConfigFile -a {} -c {}/config -d {} -t 1 -p all".format(args.hotspot_path, temp, config, data)
         print(command)
@@ -53,7 +56,7 @@ def train_model(train, dev, output, rest):
             model = ifd.read()
         return model
     finally:
-        pass #shutil.rmtree(tmp)
+        shutil.rmtree(tmp)
 
 
 def apply_model(model, test, args):
@@ -69,28 +72,57 @@ def apply_model(model, test, args):
         with open(asc, "wb") as ofd:
             ofd.write(model)
         binary = os.path.join(tmp, "config.bin")
-        command = "java -Xmx1g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -a {} -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
+        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -a {} -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
         print(command)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         out, err = pid.communicate()
         datafile = os.path.join(tmp, "data.txt")
         with open(datafile, "wt") as ofd:
-            ofd.write("\n".join([t for t in data]))
-        command = "java -Xmx1g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -X -b {} -i {}".format(args.hotspot_path, binary, datafile)
+            for t in data:
+                try:
+                    ofd.write(t + "\n")
+                except:
+                    ofd.write(t.encode() + "\n")
+            #ofd.write("\n".join([t for t in data]) + "\n")
+        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -b {} -i {}".format(args.hotspot_path, binary, datafile)
         print(command)
+        #sys.exit()
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         out, err = pid.communicate()
+        #print(out.decode())
+        #sys.exit()
         #print(out)
-        #lines = out.decode("utf-8").split("\n")[2:]
+        #lines = out.decode("utf-8") #.split("\n")[2:]
+        #print(len(test))
+        #print(len(data))
+        #print(err.decode("utf-8"))
+        #sys.exit()
         #cids, guesses, golds = [], [], []
-        #for i, (cid, lang, _) in enumerate(data):
-        #    guess = lines[1 + (i * 3)].strip().split(":")[0]
-        #    guesses.append(guess)
-        #    golds.append(lang)
-        #    cids.append(cid)
+        #with open("a.out", "wt") as ofd:
+        #    ofd.write("\n".join([t for t in data]) + "\n")
+        #with open("b.out", "wt") as ofd:
+        #    ofd.write("\n".join(lines))
+        for i in range(len(test)):
+            test[i]["scores"] = {}
+
+        for m in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S):
+        #for i, item in enumerate(test): #(cid, lang, _) in enumerate(data):
+        #    print(i)
+            #print(i, item, lines[])
+            i = int(m.group(1))            
+            line = m.group(2)
+            #print(i, m.group(2))
+            #line = lines[1 + (i * 3)] #.strip().split(":")[0]
+            #print(line)
+            scores = [x.split(":") for x in line.strip().rstrip("|").split("&") if not re.match(r"^\s*$", x)]
+            #print(scores)
+            test[i - 1]["scores"] = {k : float(v) for k, v in scores}
+            #guesses.append(guess)
+            #golds.append(lang)
+            #cids.append(cid)
     finally:
-        pass
-        #shutil.rmtree(tmp)
+        shutil.rmtree(tmp)
+    return test
     #sys.exit()
     #return (cids, golds, guesses)
 

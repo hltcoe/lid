@@ -20,42 +20,42 @@ if __name__ == "__main__":
     
     start = time.time()
     module = importlib.import_module(args.model_name)
-    with gzip.open(args.train_input, "rt") as ifd:
-        train = json.loads(ifd.read())
-    with gzip.open(args.dev_input, "rt") as ifd:
-        dev = json.loads(ifd.read())
     
     logging.info("Loading training data...")
-    train_instances = []
-    for item in train:
-        seq = []
-        label_counts = {}
-        for token in item["tokens"]:
-            lang = token["language"]
-            label_counts[lang] = label_counts.get(lang, 0)
-            label_counts[lang] += 1
-            seq.append(token["form"])
-        label = max([(v,k) for k,v in label_counts.items()])[1]
-        train_instances.append({"label" : label, "sequence" : " ".join(seq)})
+    with gzip.open(args.train_input, "rt") as ifd:
+        train = json.loads(ifd.read())
+    # train_instances = []
+    # for item in train:
+    #     seq = []
+    #     label_counts = {}
+    #     for token in item["tokens"]:
+    #         lang = token["language"]
+    #         label_counts[lang] = label_counts.get(lang, 0)
+    #         label_counts[lang] += 1
+    #         seq.append(token["form"])
+    #     label = max([(v,k) for k,v in label_counts.items()])[1]
+    #     train_instances.append({"label" : label, "sequence" : " ".join(seq)})
 
     logging.info("Loading dev data...")
-    dev_instances = []
-    for item in dev:
-        seq = []
-        label_counts = {}
-        for token in item["tokens"]:
-            lang = token["language"]
-            label_counts[lang] = label_counts.get(lang, 0)
-            label_counts[lang] += 1
-            seq.append(token["form"])
-        label = max([(v,k) for k,v in label_counts.items()])[1]
-        dev_instances.append({"label" : label, "sequence" : " ".join(seq)})
+    with gzip.open(args.dev_input, "rt") as ifd:
+        dev = json.loads(ifd.read())
+    # dev_instances = []
+    # for item in dev:
+    #     seq = []
+    #     label_counts = {}
+    #     for token in item["tokens"]:
+    #         lang = token["language"]
+    #         label_counts[lang] = label_counts.get(lang, 0)
+    #         label_counts[lang] += 1
+    #         seq.append(token["form"])
+    #     label = max([(v,k) for k,v in label_counts.items()])[1]
+    #     dev_instances.append({"label" : label, "sequence" : " ".join(seq)})
 
 
 
 
         
-    model = module.train_model(train_instances, dev_instances, args.model_output, rest)
+    model = module.train_model(train, dev, args.model_output, rest)
     end = time.time()
     with gzip.open(args.statistical_output, "wt") as ofd:
         ofd.write(json.dumps({"time" : end - start}))
