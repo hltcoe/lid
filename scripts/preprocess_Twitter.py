@@ -10,7 +10,7 @@ if __name__ == "__main__":
     parser.add_argument(dest="inputs", nargs="+", help="Input files")
     parser.add_argument("-o", "--output", dest="output", help="Output file")
     args = parser.parse_args()
-    
+
     with gzip.open(args.inputs[0], "rt") as ifd, gzip.open(args.output, "wt") as ofd:
         first = True
         ofd.write("[\n")

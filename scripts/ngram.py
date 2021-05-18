@@ -12,48 +12,40 @@ from glob import glob
 import warnings
 import sys
 import xml.etree.ElementTree as et
-import math
 
 warnings.simplefilter(action='ignore')
 
 
+
 def train_model(train, dev, output, rest):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hotspot_path", dest="hotspot_path")
+    parser.add_argument("--ngram_path", dest="ngram_path")
+    parser.add_argument("--ngram_length", dest="ngram_length", type=int)
     args, rest = parser.parse_known_args(rest)
     tmp = tempfile.mkdtemp()
 
     try:
-        instances = {}
-        for item in train:
-            text = " ".join([t["form"] for t in item["tokens"]])
-            lang = item["tokens"][0]["language"]
-            instances[lang] = instances.get(lang, [])
-            instances[lang].append(text)
-
-        data, config, temp = [os.path.join(tmp, x) for x in ["data", "config", "temp"]]
-        [os.mkdir(x) for x in [data, config, temp]]
-        for label, texts in instances.items():
-            os.mkdir(os.path.join(data, label))
-            for i, text in enumerate(texts):
-                with open(os.path.join(data, label, "{}-{}-UTF-8".format(i, label)), "wt") as ofd:
-                    try:
-                        ofd.write(text)
-                    except:
-                        ofd.write(text.encode())
-
-        command = "java -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/trainer/BuildConfigFile -a {} -c {}/config -d {} -t 1 -p all".format(args.hotspot_path, temp, config, data)
+        with open(os.path.join(tmp, "train.txt"), "wt") as ofd:
+            for item in train:
+                counts = {}
+                for tok in item["tokens"]:
+                    counts[tok["language"]] = counts.get(tok["language"], 0) + 1
+                maj_lang = sorted([(v, k) for k, v in counts.items()])[-1][1]
+                text = " ".join([t["form"] for t in item["tokens"]])
+                ofd.write("{}\t{}\t{}\n".format(item["id"], maj_lang, text))
+        command = "stack exec ngramClassifier -- train --trainFile {} --n {} --modelFile {}".format(os.path.join(tmp, "train.txt"), args.ngram_length, os.path.join(tmp, "model.bin"))
+        #command = "java -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/trainer/BuildConfigFile -a {} -c {}/config -d {} -t 1 -p all".format(args.hotspot_path, temp, config, data)
         print(command)
-        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
-        pid.communicate()
-        model_out = os.path.join(tmp, "model.ascii")
-        command = "java -Xmx12g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/trainer/HotspotTrainer -c {}/config_med -a {}".format(args.hotspot_path, config, model_out)
-        print(command)
-        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
+        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE, cwd=args.ngram_path)
         out, err = pid.communicate()
+        #model_out = os.path.join(tmp, "model.ascii")
+        #command = "java -Xmx12g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/trainer/HotspotTrainer -c {}/config_med -a {}".format(args.hotspot_path, config, model_out)
+        #print(command)
+        #pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
+        #out, err = pid.communicate()
         if pid.returncode != 0:
             raise Exception(err + out)
-        with open(model_out, "rb") as ifd:
+        with open(os.path.join(tmp, "model.bin"), "rb") as ifd:
             model = ifd.read()
         return model
     finally:
@@ -62,93 +54,34 @@ def train_model(train, dev, output, rest):
 
 def apply_model(model, test, args):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--hotspot_path", dest="hotspot_path")
+    parser.add_argument("--ngram_path", dest="ngram_path")
+    parser.add_argument("--ngram_length", dest="ngram_length", type=int)
     args, rest = parser.parse_known_args(args)
     tmp = tempfile.mkdtemp()
     print(tmp)
     expand = 30
     try:
-        data = [" ".join([t["form"] for t in x["tokens"]]) for x in test]
-        asc = os.path.join(tmp, "config.ascii")
-        with open(asc, "wb") as ofd:
+        with open(os.path.join(tmp, "model.bin"), "wb") as ofd:
             ofd.write(model)
-        binary = os.path.join(tmp, "config.bin")
-        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -a {} -c -X -K -x -N -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
+        with open(os.path.join(tmp, "test.txt"), "wt") as ofd:
+            for item in test:
+                counts = {}
+                for tok in item["tokens"]:
+                    counts[tok["language"]] = counts.get(tok["language"], 0) + 1
+                maj_lang = sorted([(v, k) for k, v in counts.items()])[-1][1]
+                text = " ".join([t["form"] for t in item["tokens"]])
+                ofd.write("{}\t{}\t{}\n".format(item["id"], maj_lang, text))
+        command = "stack exec ngramClassifier -- apply --testFile {} --n {} --modelFile {} --scoresFile {}".format(os.path.join(tmp, "test.txt"), args.ngram_length, os.path.join(tmp, "model.bin"), os.path.join(tmp, "scores.txt"))
         print(command)
-        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
+        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE, cwd=args.ngram_path)
         out, err = pid.communicate()
-        datafile = os.path.join(tmp, "data.txt")
-            #ofd.write("\n".join([t for t in data]) + "\n")
-        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -X -x -K -c -b {} -f {}".format(args.hotspot_path, binary, datafile)
-        for i in range(len(data)):
-            test[i]["scores"] = {}
-            with open(datafile, "wt") as ofd:
-                try:
-                    ofd.write(data[i] + "\n")
-                except:
-                    ofd.write(data[i].encode() + "\n")
-            pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
-            out, err = pid.communicate()
-            #print(out)
-            #sys.exit()
-            xml = et.fromstring(re.match(r".*(\<hotspotResult.*hotspotResult\>).*", out.decode("utf-8"), re.M|re.S).group(1))
-            for res in xml.findall("result"):
-                lang = res.get("language")
-                score = float(res.get("score"))
-
-                test[i]["scores"][lang] = float("-inf") if score == 0.0 else  math.log(score)
-                #ofd.write(" ".join([x["form"] for x in data[i]["tokens"]]))
-                
-        #with open(datafile, "wt") as ofd:
-        #    for t in data:
-        #        try:
-        #            ofd.write(t + "\n")
-        #        except:
-        #            ofd.write(t.encode() + "\n")
-
-        #print(command)
-        #sys.exit()
-
-
-        #out = out.decode("utf-8")
-        #print(re.match(r".*(\<hotspotResult.*hotspotResult\>).*", out, re.M|re.S).group(1))
-        #for i, match in enumerate(re.finditer(r".*(\<hotspotResult.*hotspotResult\>).*", out.decode("utf-8"), flags=re.M|re.S)):
-        #    print(i, len(test))
-            #xml = et.fromstring(re.match(r".*(\<hotspotResult.*hotspotResult\>).*", out.decode("utf-8"), re.M|re.S).group(1))
-        
-        #print(et.tostring(xml))
-
-        #print(out.decode())
-        #sys.exit()
-        #print(out)
-        #lines = out.decode("utf-8") #.split("\n")[2:]
-        #print(len(test))
-        #print(len(data))
-        #print(err.decode("utf-8"))
-        #sys.exit()
-        #cids, guesses, golds = [], [], []
-        #with open("a.out", "wt") as ofd:
-        #    ofd.write("\n".join([t for t in data]) + "\n")
-        #with open("b.out", "wt") as ofd:
-        #    ofd.write("\n".join(lines))
-        #for i in range(len(test)):
-        #    test[i]["scores"] = {}
-
-        # for m in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S):
-        # #for i, item in enumerate(test): #(cid, lang, _) in enumerate(data):
-        # #    print(i)
-        #     #print(i, item, lines[])
-        #     i = int(m.group(1))            
-        #     line = m.group(2)
-        #     #print(i, m.group(2))
-        #     #line = lines[1 + (i * 3)] #.strip().split(":")[0]
-        #     #print(line)
-        #     scores = [x.split(":") for x in line.strip().rstrip("|").split("&") if not re.match(r"^\s*$", x)]
-        #     #print(scores)
-        #     test[i - 1]["scores"] = {k : float(v) for k, v in scores}
-            #guesses.append(guess)
-            #golds.append(lang)
-            #cids.append(cid)
+        if pid.returncode != 0:
+            raise Exception(err + out)        
+        with open(os.path.join(tmp, "scores.txt"), "rt") as ifd:
+            for i, line in enumerate(ifd):
+                _, _, _, scores = line.strip().split("\t")
+                scores = {k : float(v) for k, v in [x.split("=") for x in scores.split(" ")]}
+                test[i]["scores"] = scores
     finally:
         shutil.rmtree(tmp)
     return test

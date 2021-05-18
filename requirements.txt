@@ -1,0 +1,26 @@
+backcall==0.2.0
+decorator==5.0.7
+einops==0.3.0
+ipython==7.22.0
+ipython-genutils==0.2.0
+iso-639==0.4.5
+jedi==0.18.0
+joblib==1.0.1
+numpy==1.20.2
+parso==0.8.2
+pexpect==4.8.0
+pickleshare==0.7.5
+prompt-toolkit==3.0.18
+ptyprocess==0.7.0
+Pygments==2.8.1
+scikit-learn==0.24.1
+scipy==1.6.2
+SCons==4.1.0.post1
+sklearn==0.0
+-e git+git@github.com:TomLippincott/steamroller.git@6b608dd9c4eed60af89f79a39f4e1302e97fcb67#egg=SteamRoller
+threadpoolctl==2.1.0
+torch==1.8.1
+traitlets==5.0.5
+typing-extensions==3.7.4.3
+-e git+git@github.com:TomLippincott/VaLID.git@151dca8588923e3f32561faead676395412c9a4a#egg=VaLID
+wcwidth==0.2.5

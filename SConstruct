@@ -38,6 +38,7 @@ vars.AddVariables(
     ("TEST_PROPORTION", "Proportion of data for testing.", 0.1),
     ("FOLDS", "How many full, randomized sets of experiments to run.", 1),
     ("HOTSPOT_PATH", "", "/home/tom/projects/hotspot"),
+    ("NGRAM_PATH", "", "/home/tom/projects/text-classification/ngram"),
     (
         "DATA_PATH",
         "A base path for e.g. the DATASETS below (should probably be set to somewhere in your home directory etc).",
@@ -60,21 +61,27 @@ vars.AddVariables(
         "MODELS",
         "Each model name is associated with lists of hyper-parameters for n-ary experiments.",
         {
-            #"VaLID" : {
-            #   "ngram_length" : 4,
-            #   "use_gpu" : False,
-            #},
-            #"HOTSPOT" : {
-            #    "hotspot_path" : "${HOTSPOT_PATH}",
+            # "VaLID" : {
+            #    "ngram_length" : 4,
             #    "use_gpu" : False,
-            #},
-            #"biLSTM" : {
-            #},
+            # },
+            # "ngram" : {
+            #    "ngram_path" : "${NGRAM_PATH}",
+            #    "ngram_length" : 4,
+            #    "use_gpu" : False,
+            # },
+            # "HOTSPOT" : {
+            #     "hotspot_path" : "${HOTSPOT_PATH}",
+            #     "use_gpu" : False,
+            # },
+
+            "Hierarchical" : {
+            },
             #"CNN" : {
             #},
-            "Attention" : {
-                "use_gpu" : True
-            },
+            #"Attention" : {
+            #    "use_gpu" : False
+            #},
         }
     ),
 )
@@ -140,6 +147,11 @@ env.AddBuilder(
     "scripts/save_config.py",
     "${SOURCES} --output ${TARGETS[0]} --config '${CONFIG}'"
 )
+env.AddBuilder(
+    "SummarizeDatasets",
+    "scripts/summarize_datasets.py",
+    "${SOURCES} --output ${TARGETS[0]}"
+)
 
 #
 # This for-loop adds a build rule for each dataset defined in the SCons environment variables, relying
@@ -197,6 +209,8 @@ for dataset_name, filenames in env["DATASETS"].items():
 if len(datasets) > 1:
     datasets["Combined"] = env.CombineData("work/Combined.json.gz", datasets.values())
 env.Alias("datasets", list(datasets.values()))
+
+env.SummarizeDatasets("work/datasets.tex", datasets.values())
 
 def expand(model_spec):
     retval = [[]]

@@ -22,20 +22,22 @@ if __name__ == "__main__":
     module = importlib.import_module(args.model_name)
 
     with gzip.open(args.data_input, "rt") as ifd:
-        test = json.loads(ifd.read())
-    
-    logging.info("Loading data...")
-    instances = []
-    for item in test:
-        seq = []
-        label_counts = {}
-        for token in item["tokens"]:
-            lang = token["language"]
-            label_counts[lang] = label_counts.get(lang, 0)
-            label_counts[lang] += 1
-            seq.append(token["form"])
-        label = max([(v,k) for k,v in label_counts.items()])[1]
-        instances.append({"label" : label, "sequence" : " ".join(seq), "id" : item["id"]})
+        instances = json.loads(ifd.read())
+
+    #instances = test
+
+    #logging.info("Loading data...")
+    #instances = []
+    #for item in test:
+    #    seq = []
+    #    label_counts = {}
+    #    for token in item["tokens"]:
+    #        lang = token["language"]
+    #        label_counts[lang] = label_counts.get(lang, 0)
+    #        label_counts[lang] += 1
+    #        seq.append(token["form"])
+    #    label = max([(v,k) for k,v in label_counts.items()])[1]
+    #    instances.append({"label" : label, "sequence" : " ".join(seq), "id" : item["id"]})
 
 
     with gzip.open(args.model_input, "rb") as ifd, gzip.open(args.applied_output, "wt") as ofd:
