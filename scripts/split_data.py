@@ -15,6 +15,7 @@ if __name__ == "__main__":
     train = float(args.train[0])
     dev = train + float(args.dev[0])
     test = dev + float(args.test[0])
+    
     with gzip.open(args.input, "rt") as ifd, gzip.open(args.train[1], "wt") as train_ofd, gzip.open(args.dev[1], "wt") as dev_ofd, gzip.open(args.test[1], "wt") as test_ofd:
         ofds = {"train" : train_ofd, "dev" : dev_ofd, "test" : test_ofd}
         for ofd in ofds.values():

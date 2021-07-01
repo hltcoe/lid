@@ -5,6 +5,15 @@ import importlib
 import logging
 import pickle
 import time
+import random
+
+def limit_length(items, max_length):
+    for i in range(len(items)):
+        full_length = len(items[i]["tokens"])
+        if full_length > max_length:
+            start = random.randint(0, full_length - max_length)
+            items[i]["tokens"] = items[i]["tokens"][start:start + max_length]
+    return items
 
 if __name__ == "__main__":
 
@@ -16,46 +25,31 @@ if __name__ == "__main__":
     parser.add_argument("--statistical_output", dest="statistical_output", help="Output file for training statistics")
     args, rest = parser.parse_known_args()
 
-    logging.basicConfig(level=logging.INFO)
-    
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(name)s - %(asctime)s - %(levelname)s - %(message)s'
+    )
+    random.seed(0)
+
     start = time.time()
     module = importlib.import_module(args.model_name)
     
     logging.info("Loading training data...")
     with gzip.open(args.train_input, "rt") as ifd:
         train = json.loads(ifd.read())
-    # train_instances = []
-    # for item in train:
-    #     seq = []
-    #     label_counts = {}
-    #     for token in item["tokens"]:
-    #         lang = token["language"]
-    #         label_counts[lang] = label_counts.get(lang, 0)
-    #         label_counts[lang] += 1
-    #         seq.append(token["form"])
-    #     label = max([(v,k) for k,v in label_counts.items()])[1]
-    #     train_instances.append({"label" : label, "sequence" : " ".join(seq)})
+    random.shuffle(train)
+    train = limit_length(train[:50000], 20)
 
     logging.info("Loading dev data...")
     with gzip.open(args.dev_input, "rt") as ifd:
         dev = json.loads(ifd.read())
-    # dev_instances = []
-    # for item in dev:
-    #     seq = []
-    #     label_counts = {}
-    #     for token in item["tokens"]:
-    #         lang = token["language"]
-    #         label_counts[lang] = label_counts.get(lang, 0)
-    #         label_counts[lang] += 1
-    #         seq.append(token["form"])
-    #     label = max([(v,k) for k,v in label_counts.items()])[1]
-    #     dev_instances.append({"label" : label, "sequence" : " ".join(seq)})
 
+    random.shuffle(dev)
 
-
-
-        
+    dev = limit_length(dev[:5000], 20)
+    
     model = module.train_model(train, dev, args.model_output, rest)
+
     end = time.time()
     with gzip.open(args.statistical_output, "wt") as ofd:
         ofd.write(json.dumps({"time" : end - start}))

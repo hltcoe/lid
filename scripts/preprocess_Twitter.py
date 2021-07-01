@@ -35,7 +35,8 @@ if __name__ == "__main__":
                 tokens.append(tok)
             doc = {
                 "id" : "Twitter {}".format(cid),
-                "tokens" : tokens
+                "tokens" : tokens,
+                "language" : {language : 1.0},
             }
             if first != True:
                 ofd.write(",\n")

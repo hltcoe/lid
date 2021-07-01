@@ -31,10 +31,11 @@ vars = Variables("custom.py")
 
 vars.AddVariables(
     ("OUTPUT_WIDTH", "Limit progress-lines to a maximum number of characters.", 1000),
-    ("BATCH_SIZE", "Self-explanatory.", 1024),
+    ("BATCH_SIZE", "Self-explanatory.", 512),
     ("TRAIN_PROPORTION", "Proportion of data for training.", 0.8),
     ("DEV_PROPORTION", "Proportion of data for development/tuning.", 0.1),
     ("USE_GRID", "", False),
+    ("USE_GPU", "", True),
     ("TEST_PROPORTION", "Proportion of data for testing.", 0.1),
     ("FOLDS", "How many full, randomized sets of experiments to run.", 1),
     ("HOTSPOT_PATH", "", "/home/tom/projects/hotspot"),
@@ -49,12 +50,11 @@ vars.AddVariables(
         "This dictionary maps the name of a dataset to the locations of its canonical files (i.e. as-provided/downloaded).",
         {
             "Twitter" : ["${DATA_PATH}/twitter_lid/balanced_lid.txt.gz"], # 70 70k
-            #"Appen" : ["${DATA_PATH}/appen.tgz"], # 20 100k
-            #"Tatoeba" : ["${DATA_PATH}/sentences_detailed.tar.bz2"], # 400 9.5m
-            #"CALCS" : ["${{DATA_PATH}}/calcs2021/lid_{}.zip".format(x) for x in ["hineng", "msaea", "nepeng", "spaeng"]], # codeswitch
-            #"ADoBo" : ["${DATA_PATH}/ADoBo/training.conll.gz"], # borrow
-            #"WiLI" : ["${DATA_PATH}/wili-2018.zip"], # 200 117k
-            #"UMASS" : ["${DATA_PATH}/twitter_lid/umass_global_english_tweets-v1.zip"], # 10.5k eng/non-eng/codeswitch
+            "Appen" : ["${DATA_PATH}/appen.tgz"], # 20 100k
+            #"Tatoeba" : ["${DATA_PATH}/sentences_detailed.tar.bz2"], #400 9.5m
+            "CALCS" : ["${{DATA_PATH}}/calcs2021/lid_{}.zip".format(x) for x in ["hineng", "msaea", "nepeng", "spaeng"]], # codeswitch
+            "ADoBo" : ["${DATA_PATH}/ADoBo/training.conll.gz"], # borrow
+            "WiLI" : ["${DATA_PATH}/wili-2018.zip"], # 200 117k        
         }
     ),
     (
@@ -65,23 +65,22 @@ vars.AddVariables(
             #    "ngram_length" : 4,
             #    "use_gpu" : False,
             # },
-            # "ngram" : {
-            #    "ngram_path" : "${NGRAM_PATH}",
-            #    "ngram_length" : 4,
-            #    "use_gpu" : False,
-            # },
-            # "HOTSPOT" : {
-            #     "hotspot_path" : "${HOTSPOT_PATH}",
-            #     "use_gpu" : False,
-            # },
-
-            "Hierarchical" : {
+            "ngram" : {
+              "ngram_path" : "${NGRAM_PATH}",
+              "ngram_length" : 4,
+              "use_gpu" : False,
             },
-            #"CNN" : {
-            #},
-            #"Attention" : {
-            #    "use_gpu" : False
-            #},
+            "HOTSPOT" : {
+                "hotspot_path" : "${HOTSPOT_PATH}",
+                "use_gpu" : False,
+            },
+            "Hierarchical" : {
+                "use_gpu" : True,
+                "training_observations" : 2000000,
+                "batch_size" : 8,
+                #"apply_batch_size" : 2048,
+                "dev_interval" : 20000
+            },
         }
     ),
 )
@@ -92,7 +91,6 @@ vars.AddVariables(
 env = Environment(variables=vars, ENV=os.environ, TARFLAGS="-c -z", TARSUFFIX=".tgz",
                   tools=["default", steamroller.generate],
 )
-
 
 #
 # Replace the default progress/dry-run command-printing function with one that uses the
@@ -135,12 +133,23 @@ env.AddBuilder(
 env.AddBuilder(
     "Evaluate",
     "scripts/evaluate.py",
-    "${SOURCES} --output ${TARGETS[0]}"    
+    "${SOURCES} --output ${TARGETS[0]}",
+    other_deps=["scripts/calibration.py"],
+)
+env.AddBuilder(
+    "Heatmap",
+    "scripts/heatmap.py",
+    "--input ${SOURCES[0]} --sentence_output ${TARGETS[0]} --token_output ${TARGETS[1]}"
+)
+env.AddBuilder(
+    "Figures",
+    "scripts/figures.py",
+    "${SOURCES[0]} --sentence_heatmap ${TARGETS[0]} --sentence_bylength ${TARGETS[1]} --token_heatmap ${TARGETS[2]} --token_bylength ${TARGETS[3]}"
 )
 env.AddBuilder(
     "CreateReport",
     "scripts/create_report.py",
-    "--input ${SOURCES[0]} --output ${TARGETS[0]}"    
+    "--input ${SOURCES[0]} --output ${TARGETS[0]} --data_summary ${SOURCES[1]} ${SOURCES[2:]}"
 )
 env.AddBuilder(
     "SaveConfig",
@@ -184,14 +193,17 @@ for model_name, model_spec in env["MODELS"].items():
             ["--train_input ${SOURCES[0]} --dev_input ${SOURCES[1]} --model_output ${TARGETS[0]} --statistical_output ${TARGETS[1]} --model_name ${MODEL_NAME}"] + ["--{} {}".format(k, v) for k, v in model_spec.items()]
         ),
         other_deps=["scripts/{}.py".format(model_name)],
+        use_gpu=model_spec["use_gpu"], #True, #env["USE_GPU"]
     )
+    #model_spec["batch_size"] = 4096
     env.AddBuilder(
         apply_rule_name,
         "scripts/apply_model.py".format(model_name),
         " ".join(
-            ["--model_name ${MODEL_NAME} --model_input ${SOURCES[0]} --data_input ${SOURCES[1]} --applied_output ${TARGETS[0]} --statistical_output ${TARGETS[1]}"] + ["--{} {}".format(k, v) for k, v in model_spec.items()]
+            ["--model_name ${MODEL_NAME} --model_input ${SOURCES[0]} --data_input ${SOURCES[1]} --applied_output ${TARGETS[0]} --apply_batch_size 128 --statistical_output ${TARGETS[1]}"] + ["--{} {}".format(k, v) for k, v in model_spec.items()]
         ),
-        other_deps=["scripts/{}.py".format(model_name)]
+        other_deps=["scripts/{}.py".format(model_name)],
+        use_gpu=env["USE_GPU"]
     )
 
 #
@@ -206,11 +218,11 @@ for dataset_name, filenames in env["DATASETS"].items():
         filenames,
         DATASET_NAME=dataset_name
     )
-if len(datasets) > 1:
-    datasets["Combined"] = env.CombineData("work/Combined.json.gz", datasets.values())
+#if len(datasets) > 1:
+#    datasets["Combined"] = env.CombineData("work/Combined.json.gz", datasets.values())
 env.Alias("datasets", list(datasets.values()))
 
-env.SummarizeDatasets("work/datasets.tex", datasets.values())
+data_summary = env.SummarizeDatasets("work/datasets.tex", datasets.values())
 
 def expand(model_spec):
     retval = [[]]
@@ -221,8 +233,11 @@ def expand(model_spec):
 #
 # The main experimental (nested) loop.
 #
-outputs = []
-for fold in range(1, env["FOLDS"] + 1):
+#outputs = []
+#, []
+outputs_by_config = {}
+output_sets = []
+for fold in range(1, int(env["FOLDS"]) + 1):
     splits = {}
     for dataset_name, dataset in datasets.items():
         splits[dataset_name] = env.SplitData(
@@ -232,7 +247,7 @@ for fold in range(1, env["FOLDS"] + 1):
             DATASET_NAME=dataset_name,
         )
     env.Alias("splits", list(splits.values()))
-    for dataset_name, (train_split, dev_split, _) in splits.items():
+    for dataset_name, (train_split, dev_split, test_split) in splits.items():
         trained_models = {}
         for model_name, model_spec in env["MODELS"].items():
             training_rule = getattr(env, "Train{}".format(model_name))
@@ -252,9 +267,12 @@ for fold in range(1, env["FOLDS"] + 1):
                     DATASET_NAME=dataset_name,
                     ID=eid,
                     MODEL_NAME=model_name,
+                    USE_GPU=True, #env["USE_GPU"]
                 )
                 env.Alias("models", model)
-                for apply_dataset_name, (_, _, test_split) in splits.items():
+                #for apply_dataset_name, (_, _, test_split) in splits.items():
+                if True:
+                    apply_dataset_name = dataset_name
                     output, apply_stats = applying_rule(
                         [
                             "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/output_${ID}.json.gz",
@@ -270,8 +288,11 @@ for fold in range(1, env["FOLDS"] + 1):
                         APPLY_DATASET=apply_dataset_name,
                         ID=eid,
                         MODEL_NAME=model_name,
+                        USE_GPU=env["USE_GPU"]
                     )
-                    env.Alias("outputs", output)
+                    #env.Alias("outputs", output)
+                    key = (dataset_name, apply_dataset_name, model_name)
+                    outputs_by_config[key] = outputs_by_config.get(key, []) + [output]
                     config_file = env.SaveConfig(
                         "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/config_${ID}.json.gz",
                         [],
@@ -294,13 +315,56 @@ for fold in range(1, env["FOLDS"] + 1):
                         MODEL_NAME=model_name,
                     )
                     env.Alias("configs", config_file)
-                    outputs.append((config_file, output, train_stats, apply_stats))
+                    # heatmap = env.Heatmap(
+                    #     [
+                    #         "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/sentence_heatmap_${ID}.png", 
+                    #         "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/token_heatmap_${ID}.png", 
+                    #     ],
+                    #     output, 
+                    #     **conf,
+                    #     FOLD=fold,
+                    #     DATASET_NAME=dataset_name,
+                    #     APPLY_DATASET=apply_dataset_name,
+                    #     ID=eid,
+                    #     MODEL_NAME=model_name,
+                    # )
+                    output_sets.append((config_file, output, train_stats, apply_stats))
+                    #heatmaps.append(heatmap)
+
+outputs = sum(outputs_by_config.values(), [])
+env.Alias("outputs", outputs)
+
+heatmaps = []
+for (train, test, model), outputs in outputs_by_config.items():
+    sheatmap, sbylength, theatmap, tbylength = env.Figures(
+        [
+            "work/figures/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/sentence_heatmap.png",
+            "work/figures/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/sentence_bylength.png",
+            "work/figures/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/token_heatmap.png",
+            "work/figures/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/token_bylength.png",
+        ], 
+        outputs,
+        DATASET_NAME=train,
+        APPLY_DATASET=test,
+        MODEL_NAME=model
+    )
+    heatmaps.append((sheatmap, sbylength, theatmap, tbylength))
+    env.Alias("heatmaps", [sheatmap, theatmap])
+    env.Alias("bylengths", [sbylength, tbylength])
+
+#env.Alias("heatmaps", heatmaps)
+
 results = env.Evaluate(
     ["work/evaluation.json.gz"],
-    outputs
+    output_sets
 )
 
-#env.CreateReport(
-#    ["work/report.tex"],
-#    results
+report_tex = env.CreateReport(
+    ["work/report.tex"],
+    [results, data_summary, heatmaps]
+)
+
+#report = env.PDF(
+#    "work/report.pdf",
+#    report_tex,
 #)

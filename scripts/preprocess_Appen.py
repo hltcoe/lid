@@ -29,6 +29,7 @@ if __name__ == "__main__":
                         doc = {
                             "id" : "Appen {}".format(counter),
                             "tokens" : [{"form" : tok, "language" : language} for tok in tokens],
+                            "language" : {language : 1.0},
                         }
                         if first != True:
                             ofd.write(",\n")

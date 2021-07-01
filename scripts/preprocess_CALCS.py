@@ -29,12 +29,18 @@ if __name__ == "__main__":
                     tokens = [{"form" : w,
                                "language" : lang1 if l == "lang1" else lang2 if l == "lang2" else "unk"
                                } for w, l in [line.rstrip().split("\t") for line in sent.strip().split("\n")[1:]] if w.strip() != ""]
-                    ofd.write(
-                        json.dumps(
-                            {
-                                "id" : "CALCS {} train {}".format(blob, i),
-                                "tokens" : tokens
-                            }
-                        ) + "\n"
-                    )
+                    counts = {}
+                    for tok in tokens:
+                        counts[tok["language"]] = counts.get(tok["language"], 0) + 1
+                    total = sum(counts.values())
+                    if len(tokens) > 0:
+                        ofd.write(
+                            json.dumps(
+                                {
+                                    "id" : "CALCS {} train {}".format(blob, i),
+                                    "tokens" : tokens,
+                                    "language" : {k : v / total for k, v in counts.items()},
+                                }
+                            ) + "\n"
+                        )
 

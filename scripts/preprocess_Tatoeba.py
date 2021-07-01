@@ -17,9 +17,21 @@ if __name__ == "__main__":
         first = True
         ofd.write("[\n")
         for row in csv.DictReader(io.TextIOWrapper(ifd), delimiter="\t", fieldnames=["id", "language", "text", "user", "one", "two"]):
-            tokens = [{"form" : tok, "language" : row["language"]} for tok in re.split(r"\s+", row["text"])]
+            tokens = [{"form" : tok, "language" : row["language"]} for tok in re.split(r"\s+", row["text"]) if tok != ""]
+            counts = {}
+            for tok in tokens:
+                counts[tok["language"]] = counts.get(tok["language"], 0) + 1
+            total = sum(counts.values())
             if first != True:
                 ofd.write(",\n")
             first = False
-            ofd.write(json.dumps({"id" : "Tatoeba {}".format(row["id"]), "tokens" : tokens}))            
+            ofd.write(
+                json.dumps(
+                    {
+                        "id" : "Tatoeba {}".format(row["id"]), 
+                        "tokens" : tokens,
+                        "language" : {k : v / total for k, v in counts.items()},
+                    }
+                )
+            ) 
         ofd.write("\n]")

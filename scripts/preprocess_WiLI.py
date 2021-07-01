@@ -21,7 +21,8 @@ if __name__ == "__main__":
                 json.dumps(
                     {
                         "id" : "WiLI train {}".format(i),
-                        "tokens" : tokens
+                        "tokens" : tokens,
+                        "language" : {language : 1.0},
                     }
                 ) + "\n"
             )

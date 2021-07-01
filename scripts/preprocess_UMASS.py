@@ -18,6 +18,8 @@ if __name__ == "__main__":
     with zipfile.ZipFile(args.inputs[-1], mode="r") as zfd, gzip.open(args.output, "wt") as ofd:
         with zfd.open("umass_global_english_tweets-v1/all_annotated.tsv", mode="r") as ifd:
             for row in csv.DictReader(io.TextIOWrapper(ifd), delimiter="\t"):
+                print(row)
+                sys.exit()
                 text = row["Tweet"]
                 lengths.append(len(text))
                 tokens = re.split(r"\s+", text)

@@ -63,25 +63,37 @@ def apply_model(model, test, args):
     try:
         with open(os.path.join(tmp, "model.bin"), "wb") as ofd:
             ofd.write(model)
-        with open(os.path.join(tmp, "test.txt"), "wt") as ofd:
+        with open(os.path.join(tmp, "stest.txt"), "wt") as s_ofd, open(os.path.join(tmp, "wtest.txt"), "wt") as w_ofd:
             for item in test:
                 counts = {}
-                for tok in item["tokens"]:
+                for tid, tok in enumerate(item["tokens"]):
                     counts[tok["language"]] = counts.get(tok["language"], 0) + 1
+                    w_ofd.write("{}{}\t{}\t{}\n".format(item["id"], tid, tok["language"], tok["form"]))
                 maj_lang = sorted([(v, k) for k, v in counts.items()])[-1][1]
                 text = " ".join([t["form"] for t in item["tokens"]])
-                ofd.write("{}\t{}\t{}\n".format(item["id"], maj_lang, text))
-        command = "stack exec ngramClassifier -- apply --testFile {} --n {} --modelFile {} --scoresFile {}".format(os.path.join(tmp, "test.txt"), args.ngram_length, os.path.join(tmp, "model.bin"), os.path.join(tmp, "scores.txt"))
+                s_ofd.write("{}\t{}\t{}\n".format(item["id"], maj_lang, text))
+        command = "stack exec ngramClassifier -- apply --testFile {} --n {} --modelFile {} --scoresFile {}".format(os.path.join(tmp, "stest.txt"), args.ngram_length, os.path.join(tmp, "model.bin"), os.path.join(tmp, "sscores.txt"))
         print(command)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE, cwd=args.ngram_path)
         out, err = pid.communicate()
         if pid.returncode != 0:
             raise Exception(err + out)        
-        with open(os.path.join(tmp, "scores.txt"), "rt") as ifd:
-            for i, line in enumerate(ifd):
+        command = "stack exec ngramClassifier -- apply --testFile {} --n {} --modelFile {} --scoresFile {}".format(os.path.join(tmp, "wtest.txt"), args.ngram_length, os.path.join(tmp, "model.bin"), os.path.join(tmp, "wscores.txt"))
+        print(command)
+        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE, cwd=args.ngram_path)
+        out, err = pid.communicate()
+        if pid.returncode != 0:
+            raise Exception(err + out)        
+        with open(os.path.join(tmp, "sscores.txt"), "rt") as s_ifd, open(os.path.join(tmp, "wscores.txt"), "rt") as w_ifd:
+            for i, line in enumerate(s_ifd):
                 _, _, _, scores = line.strip().split("\t")
                 scores = {k : float(v) for k, v in [x.split("=") for x in scores.split(" ")]}
                 test[i]["scores"] = scores
+                for j in range(len(test[i]["tokens"])):
+                    wline = w_ifd.readline()
+                    _, _, _, scores = wline.strip().split("\t")
+                    scores = {k : float(v) for k, v in [x.split("=") for x in scores.split(" ")]}
+                    test[i]["tokens"][j]["scores"] = scores
     finally:
         shutil.rmtree(tmp)
     return test

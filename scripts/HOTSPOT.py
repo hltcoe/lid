@@ -57,6 +57,7 @@ def train_model(train, dev, output, rest):
             model = ifd.read()
         return model
     finally:
+        #pass
         shutil.rmtree(tmp)
 
 
@@ -65,164 +66,68 @@ def apply_model(model, test, args):
     parser.add_argument("--hotspot_path", dest="hotspot_path")
     args, rest = parser.parse_known_args(args)
     tmp = tempfile.mkdtemp()
-    print(tmp)
+    logging.info("Using temporary path: %s", tmp)
     expand = 30
     try:
         data = [" ".join([t["form"] for t in x["tokens"]]) for x in test]
+        print(len(data))
         asc = os.path.join(tmp, "config.ascii")
         with open(asc, "wb") as ofd:
             ofd.write(model)
         binary = os.path.join(tmp, "config.bin")
-        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -a {} -c -X -K -x -N -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
-        print(command)
+        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D  -a {} -c -K -N -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
+        #print(command)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         out, err = pid.communicate()
         datafile = os.path.join(tmp, "data.txt")
-            #ofd.write("\n".join([t for t in data]) + "\n")
-        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -X -x -K -c -b {} -f {}".format(args.hotspot_path, binary, datafile)
-        for i in range(len(data)):
-            test[i]["scores"] = {}
-            with open(datafile, "wt") as ofd:
-                try:
-                    ofd.write(data[i] + "\n")
-                except:
-                    ofd.write(data[i].encode() + "\n")
-            pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
-            out, err = pid.communicate()
-            #print(out)
-            #sys.exit()
-            xml = et.fromstring(re.match(r".*(\<hotspotResult.*hotspotResult\>).*", out.decode("utf-8"), re.M|re.S).group(1))
-            for res in xml.findall("result"):
-                lang = res.get("language")
-                score = float(res.get("score"))
+        with open(datafile, "wt") as ofd:
+            ofd.write("\n".join(data) + "\n")
+        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -K -c -b {} -i {}".format(args.hotspot_path, binary, datafile)
+        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
+        out, err = pid.communicate()
+        for m in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S):
+            i = int(m.group(1))            
+            line = m.group(2)
+            scores = [x.split(":") for x in line.strip().rstrip("|").split("&") if not re.match(r"^\s*$", x)]
+            test[i - 1]["scores"] = {k : math.log(float(v) + 0.0000001) for k, v in scores}
 
-                test[i]["scores"][lang] = float("-inf") if score == 0.0 else  math.log(score)
-                #ofd.write(" ".join([x["form"] for x in data[i]["tokens"]]))
-                
-        #with open(datafile, "wt") as ofd:
-        #    for t in data:
-        #        try:
-        #            ofd.write(t + "\n")
-        #        except:
-        #            ofd.write(t.encode() + "\n")
 
+        # word level
+        data = sum([[t["form"] for t in x["tokens"]] for x in test], [])
+        print(len(data))
+        asc = os.path.join(tmp, "config.ascii")
+        #with open(asc, "wb") as ofd:
+        #    ofd.write(model)
+        binary = os.path.join(tmp, "config.bin")
+        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -a {} -c -K -x -N -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
         #print(command)
-        #sys.exit()
-
-
-        #out = out.decode("utf-8")
-        #print(re.match(r".*(\<hotspotResult.*hotspotResult\>).*", out, re.M|re.S).group(1))
-        #for i, match in enumerate(re.finditer(r".*(\<hotspotResult.*hotspotResult\>).*", out.decode("utf-8"), flags=re.M|re.S)):
-        #    print(i, len(test))
-            #xml = et.fromstring(re.match(r".*(\<hotspotResult.*hotspotResult\>).*", out.decode("utf-8"), re.M|re.S).group(1))
-        
-        #print(et.tostring(xml))
-
-        #print(out.decode())
-        #sys.exit()
-        #print(out)
-        #lines = out.decode("utf-8") #.split("\n")[2:]
-        #print(len(test))
-        #print(len(data))
-        #print(err.decode("utf-8"))
-        #sys.exit()
-        #cids, guesses, golds = [], [], []
-        #with open("a.out", "wt") as ofd:
-        #    ofd.write("\n".join([t for t in data]) + "\n")
-        #with open("b.out", "wt") as ofd:
-        #    ofd.write("\n".join(lines))
-        #for i in range(len(test)):
-        #    test[i]["scores"] = {}
-
-        # for m in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S):
-        # #for i, item in enumerate(test): #(cid, lang, _) in enumerate(data):
-        # #    print(i)
-        #     #print(i, item, lines[])
-        #     i = int(m.group(1))            
-        #     line = m.group(2)
-        #     #print(i, m.group(2))
-        #     #line = lines[1 + (i * 3)] #.strip().split(":")[0]
-        #     #print(line)
-        #     scores = [x.split(":") for x in line.strip().rstrip("|").split("&") if not re.match(r"^\s*$", x)]
-        #     #print(scores)
-        #     test[i - 1]["scores"] = {k : float(v) for k, v in scores}
-            #guesses.append(guess)
-            #golds.append(lang)
-            #cids.append(cid)
+        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
+        out, err = pid.communicate()
+        datafile = os.path.join(tmp, "data.txt")
+        with open(datafile, "wt") as ofd:
+            ofd.write("\n".join([t for t in data]) + "\n")
+        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -K -c -b {} -i {}".format(args.hotspot_path, binary, datafile)
+        #print(command)
+        pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
+        out, err = pid.communicate()
+        #print(
+        #    len([x for x in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S)]),
+        #    len(data)
+        #)
+        #with open("test.txt", "wt") as ofd:
+        #    ofd.write(out.decode())
+        #prev = 0
+        mapping = {int(m.group(1)) : m.group(2) for m in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S)}
+        k = 1
+        for i in range(len(test)):
+            for j in range(len(test[i]["tokens"])):                
+                line = mapping.get(k, "unknown:0&|")
+                scores = [x.split(":") for x in line.strip().rstrip("|").split("&") if not re.match(r"^\s*$", x)]
+                test[i]["tokens"][j]["scores"] = {k : math.log(float(v) + 0.0000000001) for k, v in scores}
+                k += 1
     finally:
         shutil.rmtree(tmp)
     return test
-    #sys.exit()
-    #return (cids, golds, guesses)
-
-
-    # tmp = tempfile.mkdtemp()
-    # try:
-    #     instances = []
-    #     cids = []
-    #     #with gzip.open(args.input, "rt") as ifd:
-    #     #    for line in ifd:
-    #     #        cid, label, text = line.strip().split("\t")
-    #     for item in test:
-    #         instances.append((item["label"], item["sequence"]))
-    #         cids.append(item["id"])
-
-    #     dev_file = os.path.join(tmp, "dev.txt")
-    #     with open(dev_file, "wt") as ofd:
-    #         ofd.write("\n".join([t for _, t in instances]))
-
-    #     command = "java -Xmx12g -cp {} hotspot/scanner/HotspotScanner -b {} -i {}".format(args.hotspot_path, args.model, dev_file)
-    #     logging.info("Running '%s'", command)
-    #     pid = Popen(shlex.split(command), stdout=PIPE, stderr=PIPE)
-    #     out, err = pid.communicate()
-    #     if pid.returncode != 0:
-    #         raise Exception(err)
-    #     guesses = []
-    #     #for line in [l for l in out.decode().split("\n") if l.startswith("\t")]:
-    #     #    guesses.append(line.strip().split(":")[0])
-    #     #gold = [l for l, _ in instances]
-    #     #with gzip.open(args.output, "wt") as ofd:
-    #     #    for c, l, g in zip(cids, gold, guesses):
-    #     #        ofd.write("{}\t{}\t{}\n".format(c, l, g))
-
-    #     #return f1_score(y_true=gold, y_pred=guesses, average="macro")
-    # finally:
-    #     shutil.rmtree(tmp)        
-
-        
-    # print(rest)
-    # sys.exit()
-    # best_acc = 0.0
-    # best_size = None
-    # best_exp = None
-    # for size in ["fast", "med", "lrg"]:
-    #     #logging.info("Building %s model", size)
-    #     train_one_model(args, size, tmp)
-    #     for exp in [16, 32, 64, 128, 256]:
-    #         #logging.info("...with %d expansion", exp)
-    #         command = "java -Xmx12g -cp {} hotspot/scanner/HotspotScanner -a {} -s {} -E {}".format(args.jar,
-    #                                                                                                 os.path.join(tmp, "model.ascii"),
-    #                                                                                                 os.path.join(tmp, "model.bin"),
-    #                                                                                                 exp)
-    #         logging.info("Running '%s'", command)            
-    #         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
-    #         out, err = pid.communicate()
-    #         if pid.returncode != 0:
-    #             raise Exception(err)
-    #         args.input = args.dev
-    #         args.model = os.path.join(tmp, "model.bin")
-    #         acc = apply_model(args, tmp)
-    #         #logging.info("%s", acc)
-    #         if acc > best_acc:
-    #             best_acc = acc
-    #             best_size = size
-    #             best_exp = exp
-                
-    #             shutil.copyfile(args.model, args.model + ".best")
-    #             #sys.exit()
-    #             #shutil.copyfile(os.path.join(tmp, "model.ascii"), args.output + ".ascii")
-    # shutil.copyfile(args.model + ".best", args.output)                
-    # print(best_acc, best_size, best_exp)
 
 
 if __name__ == "__main__":

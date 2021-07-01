@@ -25,13 +25,15 @@ def train_model(train, dev, output, rest):
     logging.info("Training %d-gram model on train set...", args.ngram_length)
     word_model = Classifier(order=args.ngram_length, alphabet_size=256) #len(train_alphabet))
     sentence_model = Classifier(order=args.ngram_length, alphabet_size=256) #len(train_alphabet))
-    for i in train_instances:
+    for item in train_instances:
         counts = {}
-        for tok in i["tokens"]:
+        for tok in item["tokens"]:
             word_model.train(tok["language"], tok["form"])
             counts[tok["language"]] = counts.get(tok["language"], 0) + 1
         maj_lang = sorted([(v, k) for k, v in counts.items()])[-1][1]
-        sentence_model.train(maj_lang, " ".join([t["form"] for t in i["tokens"]]))
+        #maj_lang = tok["language"] #sorted([(v, k) for k, v in item["language"].items()])[-1][1]
+        #_, maj_lang = max([(v, k) for k, v in item["language"].items()])
+        sentence_model.train(maj_lang, " ".join([t["form"] for t in item["tokens"]]))
     return pickle.dumps((word_model, sentence_model))
 
 

@@ -3,6 +3,15 @@ import os.path
 import json
 import gzip
 
+descriptions = {
+    "Appen" : "Balanced dataset of SMS text messages provided by Appen.",
+    "Twitter" : "Balanced dataset of tweets compiled and labeled by Twitter using a combination of automatic and manual annotation.",
+    "ADoBo" : "Spanish newswire with lexical items annotated for English and Other-non-Spanish.",
+    "CALCS" : "Tweets marked at the word-level for code-switching between English, Spanish, Modern Standard Arabic, Egyptian Arabic, Hindi, Nepali, and Other.",
+    "WiLI" : "Whitespace and special-character normalized paragraphs from Wikipedia.",
+    "Tatoeba" : "Crowdsourced database of sentence-level translations initialized in 2006.",
+}
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
@@ -11,27 +20,39 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with open(args.output, "wt") as ofd:
-        ofd.write("""\\begin{tabular}{llllp{.5\\textwidth}}
-\\hline
-Name & Languages & Documents & Avg length & Description \\\\
-\\hline
+        ofd.write("""\\begin{table}[h]
+  \\begin{tabular}{lrrrrrp{.5\\textwidth}}
+    \\toprule
+    Name & Langs & Docs & \\multicolumn{2}{c}{Avg char length}  & \\%-Switched & Description \\\\
+    & & & Document & Token & & \\\\
+    \\midrule
 """)
         for fname in args.inputs:
-            name = os.path.splitext(os.path.basename(fname))[0]
+            name = os.path.splitext(os.path.splitext(os.path.basename(fname))[0])[0]
             languages = {}
-            lengths = []
+            sentence_lengths = []
+            token_lengths = []
+            code_sw = []
             with gzip.open(fname, "rt") as ifd:
                 for line in ifd:
                     line = line.strip().rstrip(",")
                     if line not in ["[", "]"]:
                         j = json.loads(line)
-                        length = 0
+                        sentence_length = 0
+                        prev = None
+                        cs = False
                         for tok in j["tokens"]:
-                            length += (1 + len(tok["form"]))
+                            sentence_length += (1 + len(tok["form"]))
+                            token_lengths.append(len(tok["form"]))
+                            if prev != None and prev != tok["language"]:
+                                cs = True
+                            prev = tok["language"]
                             languages[tok["language"]] = languages.get(tok["language"], 0) + 1
-                        lengths.append(length)
-            ofd.write("""{} & {} & {} & {:.3f} & \\\\
-""".format(name, len(languages), len(lengths), sum(lengths) / (1 + len(lengths))))
-        ofd.write("""\\hline
-\\end{tabular}
-        """)
+                        code_sw.append(1 if cs else 0)
+                        sentence_lengths.append(sentence_length)
+            ofd.write("""    {} & {} & {} & {:.2f} & {:.2f} & {:.2f} & {} \\\\
+""".format(name, len(languages), len(sentence_lengths), sum(sentence_lengths) / len(sentence_lengths), sum(token_lengths) / len(token_lengths), int(100 * sum(code_sw) / len(code_sw)), descriptions[name]))
+        ofd.write("""    \\bottomrule
+  \\end{tabular}
+\\end{table}
+""")
