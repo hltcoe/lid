@@ -18,9 +18,12 @@ def cavg(beta, p_miss, p_fa, labels):
     n_l = len(labels)
     total_miss = sum(p_miss.values())
     items = [v for v in p_fa.values()]
-    total_fa = (beta * sum(sum([list(v.values()) for v in p_fa.values()], []))) / (len(p_miss) - 1)
-    retval = (total_miss + total_fa) / len(p_miss)
+    total_fa = (beta * sum(sum([list(v.values()) for v in p_fa.values()], []))) / (len(labels) - 1)
+    retval = (total_miss + total_fa) / len(labels)
     logging.info("Computed C_avg with beta={:.3f} to be: {:.3f}".format(beta, retval))
+    if retval > 1.0 or retval < 0.0:
+        print(beta, p_miss, p_fa, labels)
+        raise Exception("C_avg of {} is out of bounds".format(retval))    
     return retval
 
 def cprim(p_miss, p_fa, labels):
@@ -60,4 +63,10 @@ def c_metric(scores_list, gold_list):
     if "unk" not in p_miss:
         p_miss["unk"] = 0.0
     p_fa = {k : {l : sum(w) / len(gold_list) for l, w in v.items()} for k, v in p_fa.items()}
-    return cprim(p_miss, p_fa, labels)
+    retval = cprim(p_miss, p_fa, labels)
+    if retval > 1.0 or retval < 0.0:
+        raise Exception("C_metric of {} is out of bounds".format(retval))
+    return retval
+
+if __name__ == "__main__":
+    pass

@@ -43,18 +43,17 @@ vars.AddVariables(
     (
         "DATA_PATH",
         "A base path for e.g. the DATASETS below (should probably be set to somewhere in your home directory etc).",
-        "/tmp"
+        "data/"
     ),
     (
         "DATASETS",
         "This dictionary maps the name of a dataset to the locations of its canonical files (i.e. as-provided/downloaded).",
         {
-            "Twitter" : ["${DATA_PATH}/twitter_lid/balanced_lid.txt.gz"], # 70 70k
-            "Appen" : ["${DATA_PATH}/appen.tgz"], # 20 100k
-            #"Tatoeba" : ["${DATA_PATH}/sentences_detailed.tar.bz2"], #400 9.5m
-            "CALCS" : ["${{DATA_PATH}}/calcs2021/lid_{}.zip".format(x) for x in ["hineng", "msaea", "nepeng", "spaeng"]], # codeswitch
-            "ADoBo" : ["${DATA_PATH}/ADoBo/training.conll.gz"], # borrow
-            "WiLI" : ["${DATA_PATH}/wili-2018.zip"], # 200 117k        
+            "Twitter" : ["${DATA_PATH}/twitter/balanced_lid.txt.gz"],
+            "Appen" : ["${DATA_PATH}/appen/sms.tgz"],
+            "CALCS" : ["${{DATA_PATH}}/calcs2021/lid_{}.zip".format(x) for x in ["hineng", "msaea", "nepeng", "spaeng"]],
+            "ADoBo" : ["${DATA_PATH}/ADoBo/training.conll.gz"],
+            "WiLI" : ["${DATA_PATH}/wikipedia/wili-2018.zip"],
         }
     ),
     (
@@ -65,15 +64,15 @@ vars.AddVariables(
             #    "ngram_length" : 4,
             #    "use_gpu" : False,
             # },
-            "ngram" : {
-              "ngram_path" : "${NGRAM_PATH}",
-              "ngram_length" : 4,
-              "use_gpu" : False,
-            },
-            "HOTSPOT" : {
-                "hotspot_path" : "${HOTSPOT_PATH}",
-                "use_gpu" : False,
-            },
+            #"ngram" : {
+            #  "ngram_path" : "${NGRAM_PATH}",
+            #  "ngram_length" : 4,
+            #  "use_gpu" : False,
+            #},
+            #"HOTSPOT" : {
+            #    "hotspot_path" : "${HOTSPOT_PATH}",
+            #    "use_gpu" : False,
+            #},
             "Hierarchical" : {
                 "use_gpu" : True,
                 "training_observations" : 2000000,
@@ -195,7 +194,6 @@ for model_name, model_spec in env["MODELS"].items():
         other_deps=["scripts/{}.py".format(model_name)],
         use_gpu=model_spec["use_gpu"], #True, #env["USE_GPU"]
     )
-    #model_spec["batch_size"] = 4096
     env.AddBuilder(
         apply_rule_name,
         "scripts/apply_model.py".format(model_name),
@@ -218,8 +216,7 @@ for dataset_name, filenames in env["DATASETS"].items():
         filenames,
         DATASET_NAME=dataset_name
     )
-#if len(datasets) > 1:
-#    datasets["Combined"] = env.CombineData("work/Combined.json.gz", datasets.values())
+
 env.Alias("datasets", list(datasets.values()))
 
 data_summary = env.SummarizeDatasets("work/datasets.tex", datasets.values())
@@ -233,8 +230,6 @@ def expand(model_spec):
 #
 # The main experimental (nested) loop.
 #
-#outputs = []
-#, []
 outputs_by_config = {}
 output_sets = []
 for fold in range(1, int(env["FOLDS"]) + 1):

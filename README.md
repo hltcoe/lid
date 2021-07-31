@@ -1,6 +1,20 @@
 # Language Identification for Text
 
-This repository is essentially a template for how *I* structure a new project.
+This repository defines experiments that compare performance of different approaches to language identification for text, and demonstrates an number of reasonable general choices and practices.  It began as a fresh fork of <https://github.com/TomLippincott/new-project.git>, so that repository may be a useful starting-point for similar projects.
+
+## Quick start
+
+```
+git clone https://github.com/TomLippincott/lid.git
+cd lid
+python3 -m venv local
+source local/bin/activate
+pip install -r requirements.txt
+wget -O - http://logical-space.org/img/data.tgz | tar xpz
+deactivate
+```
+
+
 
             # ISO 639 (language)
             # ISO 15924 (script)

@@ -11,19 +11,32 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="inputs", nargs="+", help="Input files")
+    #parser.add_argument("-i", "--input", dest="input")
     parser.add_argument("-o", "--output", dest="output", help="Output file")
     args, rest = parser.parse_known_args()
 
     logging.basicConfig(level=logging.INFO)
+
+    rinputs = []
+    for fname in args.inputs:
+        
+        rinputs += [
+            fname,
+            fname.replace("config", "output"),
+            fname.replace("config", "trainstats"),
+            fname.replace("config", "applystats"),
+        ]
+
+    args.inputs = rinputs
 
     results = []
     exps = len(args.inputs) // 4
     for i in range(exps):
         config_f, output_f, tstats_f, astats_f = args.inputs[i * 4 : (i + 1) * 4]
         print(config_f)
-        with gzip.open(config_f, "rt") as cfd, gzip.open(tstats_f, "rt") as tfd, gzip.open(astats_f, "rt") as afd:
+        with gzip.open(config_f, "rt") as cfd, gzip.open(astats_f, "rt") as afd:
             config = json.loads(cfd.read())
-            tstats = json.loads(tfd.read())
+            #tstats = json.loads(tfd.read())
             astats = json.loads(afd.read())
         languages = set()
         token_scores, token_golds = [], []
@@ -40,6 +53,9 @@ if __name__ == "__main__":
                     for token in item["tokens"]:
                         for k, v in token["scores"].items():
                             _sentence_scores[k] = _sentence_scores.get(k, 0.0) + v
+                if "unknown" in _sentence_scores:
+                    _sentence_scores["unk"] = max([_sentence_scores.get("unk", float("-inf")), _sentence_scores["unknown"]])
+                    del _sentence_scores["unknown"]
                 _, sentence_gold = max([(v, k) for k, v in item["language"].items()])
                 _, sentence_guess = max([(v, k) for k, v in _sentence_scores.items()]) #item["scores"].items()])
                 by_sentence_length[len(item["tokens"])] = by_sentence_length.get(len(item["tokens"]), [])
@@ -51,6 +67,10 @@ if __name__ == "__main__":
                 for token in item["tokens"]:
                     token_gold = token["language"]
                     languages.add(token_gold)
+                    if "unknown" in token["scores"]:
+                        token["scores"]["unk"] = max([token["scores"].get("unk", float("-inf")), token["scores"]["unknown"]])
+                        del token["scores"]["unknown"]
+
                     token_scores.append(token["scores"])
                     token_golds.append(token_gold)
                     _, token_guess = max([(v, k) for k, v in token["scores"].items()])
@@ -84,7 +104,7 @@ if __name__ == "__main__":
             sentence_golds,
             average="macro"
         )
-        config["train_seconds"] = tstats["time"]
+        #config["train_seconds"] = tstats["time"]
         config["apply_tokens_per_second"] = (len(token_golds) * 2) / astats["time"]
         for x in ["use_gpu", "hotspot_path"]:
             if x in config:
