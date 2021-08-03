@@ -319,7 +319,7 @@ def train_model(train, dev, output, rest):
                              dev_sentence_f1
                 )
                 if new_best or best_dev_score == None:
-                    logging.info("New best dev score: %.3f", abs(score))
+                    logging.info("New best dev F-score: %.3f", abs(score))
                     best_dev_score = score
                     best_state = {k : v.clone().detach().cpu() for k, v in model.state_dict().items()}
 

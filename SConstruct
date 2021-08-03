@@ -35,10 +35,10 @@ vars.AddVariables(
     ("TRAIN_PROPORTION", "Proportion of data for training.", 0.8),
     ("DEV_PROPORTION", "Proportion of data for development/tuning.", 0.1),
     ("USE_GRID", "", False),
-    ("USE_GPU", "", True),
+    ("USE_GPU", "", False),
     ("TEST_PROPORTION", "Proportion of data for testing.", 0.1),
     ("FOLDS", "How many full, randomized sets of experiments to run.", 1),
-    ("HOTSPOT_PATH", "", "/home/tom/projects/hotspot"),
+    ("HOTSPOT_PATH", "", "data/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar"),
     ("NGRAM_PATH", "", "/home/tom/projects/text-classification/ngram"),
     (
         "DATA_PATH",
@@ -53,32 +53,26 @@ vars.AddVariables(
             "Appen" : ["${DATA_PATH}/appen/sms.tgz"],
             "CALCS" : ["${{DATA_PATH}}/calcs2021/lid_{}.zip".format(x) for x in ["hineng", "msaea", "nepeng", "spaeng"]],
             "ADoBo" : ["${DATA_PATH}/ADoBo/training.conll.gz"],
-            "WiLI" : ["${DATA_PATH}/wikipedia/wili-2018.zip"],
+            #"WiLI" : ["${DATA_PATH}/wikipedia/wili-2018.zip"],
         }
     ),
     (
         "MODELS",
         "Each model name is associated with lists of hyper-parameters for n-ary experiments.",
         {
-            # "VaLID" : {
-            #    "ngram_length" : 4,
-            #    "use_gpu" : False,
-            # },
-            #"ngram" : {
-            #  "ngram_path" : "${NGRAM_PATH}",
-            #  "ngram_length" : 4,
-            #  "use_gpu" : False,
-            #},
+            "VaLID" : {
+                "ngram_length" : 4,
+                "can_use_gpu" : False,
+            },
             #"HOTSPOT" : {
             #    "hotspot_path" : "${HOTSPOT_PATH}",
-            #    "use_gpu" : False,
+            #    "can_use_gpu" : False,
             #},
             "Hierarchical" : {
-                "use_gpu" : True,
-                "training_observations" : 2000000,
+                "can_use_gpu" : True,
+                "training_observations" : 5000000,
                 "batch_size" : 8,
-                #"apply_batch_size" : 2048,
-                "dev_interval" : 20000
+                "dev_interval" : 200000,
             },
         }
     ),
@@ -125,30 +119,15 @@ env.AddBuilder(
     "--input ${SOURCES[0]} --train ${TRAIN_PROPORTION} ${TARGETS[0]} --dev ${DEV_PROPORTION} ${TARGETS[1]} --test ${TEST_PROPORTION} ${TARGETS[2]}"
 )
 env.AddBuilder(
-    "CombineData",
-    "scripts/combine_data.py",
-    "${SOURCES} --output ${TARGETS[0]}"
-)
-env.AddBuilder(
     "Evaluate",
     "scripts/evaluate.py",
     "${SOURCES} --output ${TARGETS[0]}",
     other_deps=["scripts/calibration.py"],
 )
 env.AddBuilder(
-    "Heatmap",
-    "scripts/heatmap.py",
-    "--input ${SOURCES[0]} --sentence_output ${TARGETS[0]} --token_output ${TARGETS[1]}"
-)
-env.AddBuilder(
     "Figures",
     "scripts/figures.py",
     "${SOURCES[0]} --sentence_heatmap ${TARGETS[0]} --sentence_bylength ${TARGETS[1]} --token_heatmap ${TARGETS[2]} --token_bylength ${TARGETS[3]}"
-)
-env.AddBuilder(
-    "CreateReport",
-    "scripts/create_report.py",
-    "--input ${SOURCES[0]} --output ${TARGETS[0]} --data_summary ${SOURCES[1]} ${SOURCES[2:]}"
 )
 env.AddBuilder(
     "SaveConfig",
@@ -159,6 +138,18 @@ env.AddBuilder(
     "SummarizeDatasets",
     "scripts/summarize_datasets.py",
     "${SOURCES} --output ${TARGETS[0]}"
+)
+env.AddBuilder(
+    "CreateReport",
+    "scripts/create_report.py",
+    "--input ${SOURCES[0]} --output ${TARGETS[0]} --dataset_summary ${SOURCES[1]} ${SOURCES[2:]}"
+)
+env.AddBuilder(
+    "CompileReport",
+    "",
+    "-interaction nonstopmode -jobname ${TARGETS[0].name[:-4]} ${SOURCES[0].abspath}",
+    interpreter="/usr/bin/pdflatex",
+    chdir="work"
 )
 
 #
@@ -185,14 +176,15 @@ for dataset_name, filenames in env["DATASETS"].items():
 for model_name, model_spec in env["MODELS"].items():
     train_rule_name = "Train{}".format(model_name)
     apply_rule_name = "Apply{}".format(model_name)
+    use_gpu=model_spec.get("can_use_gpu", False) and env["USE_GPU"]
     env.AddBuilder(
         train_rule_name,
         "scripts/train_model.py".format(model_name),
         " ".join(
-            ["--train_input ${SOURCES[0]} --dev_input ${SOURCES[1]} --model_output ${TARGETS[0]} --statistical_output ${TARGETS[1]} --model_name ${MODEL_NAME}"] + ["--{} {}".format(k, v) for k, v in model_spec.items()]
+            ["--train_input ${SOURCES[0]} --dev_input ${SOURCES[1]} --model_output ${TARGETS[0]} --statistical_output ${TARGETS[1]} --model_name ${MODEL_NAME}"] + ["--{} {}".format(k, v) for k, v in model_spec.items()] + ["--use_gpu" if use_gpu else ""]
         ),
         other_deps=["scripts/{}.py".format(model_name)],
-        use_gpu=model_spec["use_gpu"], #True, #env["USE_GPU"]
+        use_gpu=use_gpu
     )
     env.AddBuilder(
         apply_rule_name,
@@ -201,7 +193,7 @@ for model_name, model_spec in env["MODELS"].items():
             ["--model_name ${MODEL_NAME} --model_input ${SOURCES[0]} --data_input ${SOURCES[1]} --applied_output ${TARGETS[0]} --apply_batch_size 128 --statistical_output ${TARGETS[1]}"] + ["--{} {}".format(k, v) for k, v in model_spec.items()]
         ),
         other_deps=["scripts/{}.py".format(model_name)],
-        use_gpu=env["USE_GPU"]
+        use_gpu=model_spec.get("can_use_gpu", False) and env["USE_GPU"]
     )
 
 #
@@ -217,10 +209,13 @@ for dataset_name, filenames in env["DATASETS"].items():
         DATASET_NAME=dataset_name
     )
 
+# This alias allows us to run "scons datasets"
 env.Alias("datasets", list(datasets.values()))
 
-data_summary = env.SummarizeDatasets("work/datasets.tex", datasets.values())
-
+# This function takes a dict of parameters where some may be lists (corresponding to e.g. different
+# embedding sizes, learning rates, etc) and generates each unique, concrete combination of parameter
+# values.  In other words, it sets up grid search.  It also creates a unique identifier string for
+# each combination via a hash function.
 def expand(model_spec):
     retval = [[]]
     for key, vals in model_spec.items():
@@ -262,7 +257,7 @@ for fold in range(1, int(env["FOLDS"]) + 1):
                     DATASET_NAME=dataset_name,
                     ID=eid,
                     MODEL_NAME=model_name,
-                    USE_GPU=True, #env["USE_GPU"]
+                    USE_GPU=env["USE_GPU"]
                 )
                 env.Alias("models", model)
                 #for apply_dataset_name, (_, _, test_split) in splits.items():
@@ -310,19 +305,6 @@ for fold in range(1, int(env["FOLDS"]) + 1):
                         MODEL_NAME=model_name,
                     )
                     env.Alias("configs", config_file)
-                    # heatmap = env.Heatmap(
-                    #     [
-                    #         "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/sentence_heatmap_${ID}.png", 
-                    #         "work/${FOLD}/${DATASET_NAME}/${MODEL_NAME}/${APPLY_DATASET}/token_heatmap_${ID}.png", 
-                    #     ],
-                    #     output, 
-                    #     **conf,
-                    #     FOLD=fold,
-                    #     DATASET_NAME=dataset_name,
-                    #     APPLY_DATASET=apply_dataset_name,
-                    #     ID=eid,
-                    #     MODEL_NAME=model_name,
-                    # )
                     output_sets.append((config_file, output, train_stats, apply_stats))
                     #heatmaps.append(heatmap)
 
@@ -347,7 +329,7 @@ for (train, test, model), outputs in outputs_by_config.items():
     env.Alias("heatmaps", [sheatmap, theatmap])
     env.Alias("bylengths", [sbylength, tbylength])
 
-#env.Alias("heatmaps", heatmaps)
+dataset_summary = env.SummarizeDatasets("work/datasets.tex", datasets.values())
 
 results = env.Evaluate(
     ["work/evaluation.json.gz"],
@@ -356,10 +338,10 @@ results = env.Evaluate(
 
 report_tex = env.CreateReport(
     ["work/report.tex"],
-    [results, data_summary, heatmaps]
+    [results, dataset_summary, heatmaps]
 )
 
-#report = env.PDF(
-#    "work/report.pdf",
-#    report_tex,
-#)
+report = env.CompileReport(
+    "work/report.pdf",
+    report_tex,
+)

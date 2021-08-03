@@ -3,14 +3,6 @@ import os.path
 import json
 import gzip
 
-descriptions = {
-    "Appen" : "Balanced dataset of SMS text messages provided by Appen.",
-    "Twitter" : "Balanced dataset of tweets compiled and labeled by Twitter using a combination of automatic and manual annotation.",
-    "ADoBo" : "Spanish newswire with lexical items annotated for English and Other-non-Spanish.",
-    "CALCS" : "Tweets marked at the word-level for code-switching between English, Spanish, Modern Standard Arabic, Egyptian Arabic, Hindi, Nepali, and Other.",
-    "WiLI" : "Whitespace and special-character normalized paragraphs from Wikipedia.",
-    "Tatoeba" : "Crowdsourced database of sentence-level translations initialized in 2006.",
-}
 
 if __name__ == "__main__":
 
@@ -50,8 +42,8 @@ if __name__ == "__main__":
                             languages[tok["language"]] = languages.get(tok["language"], 0) + 1
                         code_sw.append(1 if cs else 0)
                         sentence_lengths.append(sentence_length)
-            ofd.write("""    {} & {} & {} & {:.2f} & {:.2f} & {:.2f} & {} \\\\
-""".format(name, len(languages), len(sentence_lengths), sum(sentence_lengths) / len(sentence_lengths), sum(token_lengths) / len(token_lengths), int(100 * sum(code_sw) / len(code_sw)), descriptions[name]))
+            ofd.write("""    {} & {} & {} & {:.2f} & {:.2f} & {:.2f} & \\\\
+""".format(name, len(languages), len(sentence_lengths), sum(sentence_lengths) / len(sentence_lengths), sum(token_lengths) / len(token_lengths), int(100 * sum(code_sw) / len(code_sw))))
         ofd.write("""    \\bottomrule
   \\end{tabular}
 \\end{table}

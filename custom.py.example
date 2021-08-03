@@ -1,2 +1,27 @@
-# DATA_PATH = "data/"
+DATA_PATH = "data/"
+USE_GPU = False
+USE_GRID = False
+DATASETS = {
+    "Twitter" : ["${DATA_PATH}/twitter/balanced_lid.txt.gz"],
+    "Appen" : ["${DATA_PATH}/appen/sms.tgz"],
+    "CALCS" : ["${{DATA_PATH}}/calcs2021/lid_{}.zip".format(x) for x in ["hineng", "msaea", "nepeng", "spaeng"]],
+    "ADoBo" : ["${DATA_PATH}/ADoBo/training.conll.gz"],
+    #"WiLI" : ["${DATA_PATH}/wikipedia/wili-2018.zip"],
+}
+MODELS = {
+    "VaLID" : {
+        "ngram_length" : 4,
+        "can_use_gpu" : False,
+    },
+    #"HOTSPOT" : {
+    #    "hotspot_path" : "${HOTSPOT_PATH}",
+    #    "can_use_gpu" : False,
+    #},
+    "Hierarchical" : {
+        "can_use_gpu" : True,
+        "training_observations" : 20000,
+        "batch_size" : 8,
+        "dev_interval" : 2000
+    },
+}
 

@@ -11,32 +11,20 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="inputs", nargs="+", help="Input files")
-    #parser.add_argument("-i", "--input", dest="input")
     parser.add_argument("-o", "--output", dest="output", help="Output file")
     args, rest = parser.parse_known_args()
 
     logging.basicConfig(level=logging.INFO)
 
-    rinputs = []
-    for fname in args.inputs:
-        
-        rinputs += [
-            fname,
-            fname.replace("config", "output"),
-            fname.replace("config", "trainstats"),
-            fname.replace("config", "applystats"),
-        ]
-
-    args.inputs = rinputs
-
+    num_exps = len(args.inputs) // 4
+    
     results = []
-    exps = len(args.inputs) // 4
-    for i in range(exps):
+
+    for i in range(num_exps):
         config_f, output_f, tstats_f, astats_f = args.inputs[i * 4 : (i + 1) * 4]
-        print(config_f)
-        with gzip.open(config_f, "rt") as cfd, gzip.open(astats_f, "rt") as afd:
+        with gzip.open(config_f, "rt") as cfd, gzip.open(astats_f, "rt") as afd, gzip.open(tstats_f, "rt") as tfd:
             config = json.loads(cfd.read())
-            #tstats = json.loads(tfd.read())
+            tstats = json.loads(tfd.read())
             astats = json.loads(afd.read())
         languages = set()
         token_scores, token_golds = [], []
@@ -88,12 +76,6 @@ if __name__ == "__main__":
 
         config["token_c_primary"] = c_metric(token_scores, token_golds)
         config["sentence_c_primary"] = c_metric(sentence_scores, sentence_golds)
-        #config["token_top_3_accuracy"] = top_k_accuracy_score(
-        #    [[scores.get(k) for k in languages] for scores in token_scores],
-        #    [languages.index(k) for k in token_golds],
-        #    k=3
-        #)
-        #config["sentence_top_3_accuracy"] = top_k_accuracy_score(sentence_scores, sentence_golds, k=3)
         config["token_f_score"] = f1_score(
             [max([(v, k) for k, v in s.items()])[1] for s in token_scores],
             token_golds,
@@ -104,7 +86,6 @@ if __name__ == "__main__":
             sentence_golds,
             average="macro"
         )
-        #config["train_seconds"] = tstats["time"]
         config["apply_tokens_per_second"] = (len(token_golds) * 2) / astats["time"]
         for x in ["use_gpu", "hotspot_path"]:
             if x in config:

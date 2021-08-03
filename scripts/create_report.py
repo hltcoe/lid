@@ -15,13 +15,9 @@ preamble = """
 \\usepackage{caption}
 \\usepackage{subcaption}
 \\title{Language Identification for Text}
-\\author{Tom Lippincott}
+\\author{Some Person}
 \\begin{document}
 \\maketitle
-
-
-
-
 """
 
 postamble = """
@@ -35,27 +31,22 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--input", dest="input", help="Input file")
-    parser.add_argument("--data_summary", dest="data_summary", help="")
+    parser.add_argument("--dataset_summary", dest="dataset_summary", help="Dataset summary")
     parser.add_argument("--correlations", dest="correlations", help="")
+    parser.add_argument(dest="images", nargs="*")
     parser.add_argument("--output", dest="output", help="Output path")
-    #parser.add_argument(dest="figures", nargs="+", help="")
     args, rest = parser.parse_known_args()
-
     
-    with open(args.data_summary, "rt") as ifd:
+    with open(args.dataset_summary, "rt") as ifd:
         data_summary = "\\section*{Datasets}\n" + ifd.read()
 
     figures = {}
-    for fname in glob(os.path.join(args.output, "*png")):
-        try:
-            level, dname, mname, vtype = re.match(r"^(\w+)_(\w+)_(\w+)_(\w+).png", os.path.basename(fname)).groups()
-        except:
-            level, dname, vtype = re.match(r"^(\w+)_(\w+)_(\w+).png", os.path.basename(fname)).groups()
-            mname = "all"
+    for fname in args.images:
+        mname, dname, level, vtype = re.match(r"^.*/(\w+)/(\w+)/(\w+)_(\w+).png", fname).groups()
         figures[dname] = figures.get(dname, {})
         figures[dname][level] = figures[dname].get(level, {})
         figures[dname][level][vtype] = figures[dname][level].get(vtype, {})
-        figures[dname][level][vtype][mname] = os.path.basename(fname)
+        figures[dname][level][vtype][mname] = re.sub(r"^work/", "", fname)
 
     labels = set()
     sentence_summed_counts, word_summed_counts, by_sentence_length, by_word_length, experiments = {}, {}, {}, {}, {}
@@ -81,11 +72,11 @@ if __name__ == "__main__":
 \\end{table}
 """
     table = "\n".join([l if "token\\_f\\_score" not in l else "Dataset & Model & \\multicolumn{2}{c}{F-Score} & \\multicolumn{2}{c}{Cavg} \\\\\n& & Token & Sentence & Token & Sentence \\\\" for l in table.split("\n") if "mean" not in l and "DATASET\\_NAME" not in l]).replace("ngram", "VaLID")
-    sizes = {
-        "ngram" : 8.5,
-        "HOTSPOT" : 2.8,
-        "Hierarchical" : 72
-    }
+    #sizes = {
+    #    "ngram" : 8.5,
+    #    "HOTSPOT" : 2.8,
+    #    "Hierarchical" : 72
+    #}
     model_section = """
 \\begin{table}[h]
   \\begin{tabular}{lrr}
@@ -97,17 +88,18 @@ if __name__ == "__main__":
   \\end{tabular}
     \\caption{Size is in bytes serialized on disk for the Twitter model, speed is in tokens processed per second across all experiments.  The Hierarchical model is run on GPU.}
 \\end{table}
-"""%("\n".join(["    {} & {:.1f}m & {} \\\\".format("VaLID" if k == "ngram" else k, sizes[k], int(sum(v) / len(v))) for k, v in tokens_per_second.items()]))
+"""%("\n".join(["    {} & {} & {} \\\\".format("VaLID" if k == "ngram" else k, "SIZE", int(sum(v) / len(v))) for k, v in tokens_per_second.items()]))
 
     vis = ""
-    with open(args.correlations, "rt") as ifd:
-        corr = ifd.read()
+    #with open(args.correlations, "rt") as ifd:
+    #    corr = ifd.read()
         #vis += corr
     for dname, levels in figures.items():
         vis += """
 \\clearpage
         """
         for level, vtypes in levels.items():
+            #print(level)            
             lvl = "Sentence" if level == "sentence" else "Token"
             for vtype, models in vtypes.items():
                 caption = ("%s-level confusion matrices on %s" if vtype == "hm" else "%s-level accuracy by length on %s")%(lvl, dname)
@@ -117,15 +109,28 @@ if __name__ == "__main__":
 \\end{subfigure}\n\\\\""" % (0.3 if vtype == "hm" else 0.5, f, "VaLID" if n == "ngram" else n) for n, f in sorted(list(models.items()))]
                 vis += "\n\\begin{figure}\n\\centering\n" + "\n".join(model_figs) + "\n\\caption{%s}\n\\end{figure}"%(caption)
 
-    with open(os.path.join(args.output, "data_table.tex"), "wt") as ofd:
-        ofd.write(data_summary) 
-    with open(os.path.join(args.output, "figures.tex"), "wt") as ofd:
-        ofd.write(vis)
-    with open(os.path.join(args.output, "correlations.tex"), "wt") as ofd:
-        ofd.write(corr)
-    with open(os.path.join(args.output, "models.tex"), "wt") as ofd:
-        ofd.write(model_section)
-    with open(os.path.join(args.output, "performance.tex"), "wt") as ofd:
-        ofd.write(table)
+#     with open(os.path.join(args.output, "data_table.tex"), "wt") as ofd:
+#         ofd.write(data_summary) 
+#     with open(os.path.join(args.output, "figures.tex"), "wt") as ofd:
+#         ofd.write(vis)
+#     with open(os.path.join(args.output, "correlations.tex"), "wt") as ofd:
+#         ofd.write(corr)
+#     with open(os.path.join(args.output, "models.tex"), "wt") as ofd:
+#         ofd.write(model_section)
+#     with open(os.path.join(args.output, "performance.tex"), "wt") as ofd:
+#         ofd.write(table)
         
-        #ofd.write("\n".join([preamble, data_summary, model_section, table, vis, postamble]))
+#         #ofd.write("\n".join([preamble, data_summary, model_section, table, vis, postamble]))
+    with open(args.output, "wt") as ofd:
+        ofd.write(
+            "\n".join(
+                [
+                    preamble,
+                    data_summary,
+                    #model_section,
+                    table,
+                    vis,
+                    postamble
+                ]
+            )
+        )

@@ -17,10 +17,12 @@ scikit-learn==0.24.1
 scipy==1.6.2
 SCons==4.1.0.post1
 sklearn==0.0
--e git+git@github.com:TomLippincott/steamroller.git@6b608dd9c4eed60af89f79a39f4e1302e97fcb67#egg=SteamRoller
 threadpoolctl==2.1.0
 torch==1.8.1
 traitlets==5.0.5
 typing-extensions==3.7.4.3
--e git+git@github.com:TomLippincott/VaLID.git@151dca8588923e3f32561faead676395412c9a4a#egg=VaLID
 wcwidth==0.2.5
+pandas==1.3.1
+matplotlib==3.4.2
+VaLID==1.0.8
+steamroller==1.3.4

@@ -42,12 +42,12 @@ def train_model(train, dev, output, rest):
                     except:
                         ofd.write(text.encode())
 
-        command = "java -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/trainer/BuildConfigFile -a {} -c {}/config -d {} -t 1 -p all".format(args.hotspot_path, temp, config, data)
+        command = "java -cp {} hotspot/trainer/BuildConfigFile -a {} -c {}/config -d {} -t 1 -p all".format(args.hotspot_path, temp, config, data)
         print(command)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         pid.communicate()
         model_out = os.path.join(tmp, "model.ascii")
-        command = "java -Xmx12g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/trainer/HotspotTrainer -c {}/config_med -a {}".format(args.hotspot_path, config, model_out)
+        command = "java -Xmx12g -cp {} hotspot/trainer/HotspotTrainer -c {}/config_med -a {}".format(args.hotspot_path, config, model_out)
         print(command)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         out, err = pid.communicate()
@@ -57,7 +57,6 @@ def train_model(train, dev, output, rest):
             model = ifd.read()
         return model
     finally:
-        #pass
         shutil.rmtree(tmp)
 
 
@@ -75,14 +74,13 @@ def apply_model(model, test, args):
         with open(asc, "wb") as ofd:
             ofd.write(model)
         binary = os.path.join(tmp, "config.bin")
-        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D  -a {} -c -K -N -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
-        #print(command)
+        command = "java -Xmx4g -cp {} hotspot/scanner/HotspotScanner -D  -a {} -c -K -N -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         out, err = pid.communicate()
         datafile = os.path.join(tmp, "data.txt")
         with open(datafile, "wt") as ofd:
             ofd.write("\n".join(data) + "\n")
-        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -K -c -b {} -i {}".format(args.hotspot_path, binary, datafile)
+        command = "java -Xmx4g -cp {} hotspot/scanner/HotspotScanner -D -K -c -b {} -i {}".format(args.hotspot_path, binary, datafile)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         out, err = pid.communicate()
         for m in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S):
@@ -94,29 +92,17 @@ def apply_model(model, test, args):
 
         # word level
         data = sum([[t["form"] for t in x["tokens"]] for x in test], [])
-        print(len(data))
         asc = os.path.join(tmp, "config.ascii")
-        #with open(asc, "wb") as ofd:
-        #    ofd.write(model)
         binary = os.path.join(tmp, "config.bin")
-        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -a {} -c -K -x -N -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
-        #print(command)
+        command = "java -Xmx4g -cp {} hotspot/scanner/HotspotScanner -D -a {} -c -K -x -N -s {} -E {}".format(args.hotspot_path, asc, binary, expand)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         out, err = pid.communicate()
         datafile = os.path.join(tmp, "data.txt")
         with open(datafile, "wt") as ofd:
             ofd.write("\n".join([t for t in data]) + "\n")
-        command = "java -Xmx4g -cp {}/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-8.17-SNAPSHOT-jar-with-dependencies.jar hotspot/scanner/HotspotScanner -D -K -c -b {} -i {}".format(args.hotspot_path, binary, datafile)
-        #print(command)
+        command = "java -Xmx4g -cp {} hotspot/scanner/HotspotScanner -D -K -c -b {} -i {}".format(args.hotspot_path, binary, datafile)
         pid = Popen(shlex.split(command), stderr=PIPE, stdout=PIPE)
         out, err = pid.communicate()
-        #print(
-        #    len([x for x in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S)]),
-        #    len(data)
-        #)
-        #with open("test.txt", "wt") as ofd:
-        #    ofd.write(out.decode())
-        #prev = 0
         mapping = {int(m.group(1)) : m.group(2) for m in re.finditer(r"^(\d+)\:[^\n]*\n([^\n]*)\n\s*\n", out.decode(), flags=re.M|re.S)}
         k = 1
         for i in range(len(test)):
@@ -128,31 +114,3 @@ def apply_model(model, test, args):
     finally:
         shutil.rmtree(tmp)
     return test
-
-
-if __name__ == "__main__":
-    
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers()
-    
-    train_parser = subparsers.add_parser("train")
-    train_parser.add_argument("-t", "--train", dest="train", help="Input file")
-    train_parser.add_argument("-d", "--dev", dest="dev", help="Input file")
-    train_parser.add_argument("-o", "--output", dest="output", help="Output file")
-    train_parser.add_argument("-j", "--jar", dest="jar", default="/home/tom/hotspot/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-scanner-jar-with-dependencies.jar", help="Jar file")
-    train_parser.set_defaults(func=train_model)
-    
-    apply_parser = subparsers.add_parser("apply")
-    apply_parser.add_argument("-m", "--model", dest="model", help="Model file")
-    apply_parser.add_argument("-i", "--input", dest="input", help="Input file")
-    apply_parser.add_argument("-o", "--output", dest="output", help="Output file")
-    apply_parser.add_argument("-j", "--jar", dest="jar", default="/home/tom/hotspot/Hotspot_Parent/Hotspot_Parent/hotspot/target/hotspot-scanner-jar-with-dependencies.jar", help="Jar file")    
-    apply_parser.set_defaults(func=apply_model)
-    
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.INFO)
-
-    tmp = tempfile.mkdtemp()
-    args.func(args, tmp)
-    shutil.rmtree(tmp)
