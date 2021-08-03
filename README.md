@@ -1,6 +1,6 @@
 # Language Identification for Text
 
-This repository defines experiments that compare performance of different approaches to language identification for text, and demonstrates an number of reasonable general choices and practices.  It began as a fresh fork of <https://github.com/TomLippincott/new-project.git>, so that repository may be a useful starting-point for similar projects.
+This repository defines experiments that compare performance of different approaches to language identification for text, and demonstrates an number of reasonable general choices and practices.  It began as a fresh fork of this [new project template](https://github.com/TomLippincott/new-project.git), so that repository may be a good starting-point for new research.
 
 ## Initial setup
 
