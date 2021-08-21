@@ -7,7 +7,7 @@ This repository defines experiments that compare performance of different approa
 The following commands only need to be run once.  First, clone the LID experiments repository, and change directory into it:
 
 ```
-git clone https://github.com/TomLippincott/lid.git
+git clone https://github.com/hltcoe/lid.git
 cd lid
 ```
 
